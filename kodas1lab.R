@@ -147,3 +147,63 @@ tbl_po_pasalinimo %>%
   kable(digits=3, caption="Aprašomoji statistika (Po extreme outlier'ių pašalinimo)") %>%
   kable_styling(full_width=FALSE)
 
+
+
+
+
+
+# 6 Sunormuoti duomenų aibę naudojant du normavimo metodus: pagal vidurkį ir dispersiją, min - max.
+
+# Z-score normalizacija: vidurkis ir dispersija
+X_z <- as.data.frame(scale(X_no_extreme, center = TRUE, scale = TRUE))
+
+# Min–Max normalizacija: (x - min) / (max - min)
+range01 <- function(x){
+  r <- range(x, na.rm = TRUE)
+  if (r[1] == r[2]) rep(0.5, length(x)) else (x - r[1])/(r[2] - r[1])
+}
+X_mm <- as.data.frame(lapply(X_no_extreme, range01))
+
+# Aprašomosios statistikos lentelės
+tbl_z  <- make_stats_table(X_z,  colnames(X_z)) %>%
+  mutate(across(where(is.numeric), ~ round(., 3)))
+tbl_mm <- make_stats_table(X_mm, colnames(X_mm)) %>%
+  mutate(across(where(is.numeric), ~ round(., 3)))
+
+
+tbl_z %>%
+  kable(digits = 3, caption = "Aprašomoji statistika (pagal vidurkį ir dispersija po normalizavimo)") %>%
+  kable_styling(full_width = FALSE) %>%
+  print()
+
+tbl_mm %>%
+  kable(digits = 3, caption = "Aprašomoji statistika (Min–Max po normalizavimo)") %>%
+  kable_styling(full_width = FALSE) %>%
+  print()
+
+# Bar chart’ai: požymių vidurkiai po normalizavimo
+df_means_z  <- tibble(feature = colnames(X_z),
+                      mean    = colMeans(X_z,  na.rm = TRUE))
+df_means_mm <- tibble(feature = colnames(X_mm),
+                      mean    = colMeans(X_mm, na.rm = TRUE))
+
+# Vidurkio ir dispersijos bar chart'as
+p_z <- ggplot(df_means_z, aes(x = feature, y = mean)) +
+  geom_col(fill = "steelblue") +
+  geom_hline(yintercept = 0, linewidth = 0.6) +
+  coord_flip() +
+  labs(title = "Z-score normalizacija: požymių vidurkiai",
+       x = NULL, y = "Vidurkis (SD vienetais)") +
+  theme_minimal(base_size = 12)
+
+# Min–Max bar chart'as
+p_mm <- ggplot(df_means_mm, aes(x = feature, y = mean)) +
+  geom_col(fill = "darkorange") +
+  coord_flip(ylim = c(0,1)) +
+  labs(title = "Min–Max normalizacija: požymių vidurkiai",
+       x = NULL, y = "Vidurkis (0–1)") +
+  theme_minimal(base_size = 12)
+
+# chartai
+p_z
+p_mm                              
