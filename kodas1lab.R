@@ -103,3 +103,49 @@ colSums(is.na(df))
 df[ ] <- df %>%
   mutate(across(where(is.numeric),
                 ~ ifelse(is.na(.), median(., na.rm=TRUE), .)))
+
+
+
+
+# 5 Nustatyti taškus atsiskyrėlius, pašalinti juos iš duomenų aibės.
+# pasirenkam kintamuosius
+X <- df[, feats]
+
+# IQR klasifikatorius
+classify_iqr <- function(x){
+  Q1 <- quantile(x,.25,na.rm=TRUE); Q3 <- quantile(x,.75,na.rm=TRUE); I <- Q3-Q1
+  il <- Q1-1.5*I; ih <- Q3+1.5*I; ol <- Q1-3*I; oh <- Q3+3*I
+  ifelse(x<ol | x>oh, "extreme", ifelse(x<il | x>ih, "mild", "normal"))
+}
+
+# suvestinė per požymius (normal/mild/extreme)
+outlier_summary <- sapply(X, function(col) table(classify_iqr(col)))
+n <- nrow(X)
+out_tbl <- do.call(rbind, lapply(names(outlier_summary), function(v){
+  tab <- outlier_summary[[v]]
+  normal  <- as.integer(tab["normal"]); mild <- as.integer(tab["mild"]); extreme <- as.integer(tab["extreme"])
+  data.frame(
+    variable     = v,
+    normal       = ifelse(is.na(normal),  0, normal),
+    mild         = ifelse(is.na(mild),    0, mild),
+    extreme      = ifelse(is.na(extreme), 0, extreme),
+    mild_proc     = round(100*ifelse(is.na(mild),0,mild)/n, 1),
+    extreme_proc  = round(100*ifelse(is.na(extreme),0,extreme)/n, 1)
+  )
+}))
+out_tbl
+
+# kable(out_tbl, digits=1, caption="IQR outlier'iai: normal / mild / extreme") %>% kable_styling(full_width=FALSE)
+# write.csv(out_tbl, "outliers_summary.csv", row.names=FALSE)
+
+# eilutės su bent vienu EXTREME; pašalinam tik jas
+extreme_flags <- apply(sapply(X, function(col) classify_iqr(col)=="extreme"), 1, any)
+X_no_extreme <- X[!extreme_flags, , drop=FALSE]
+
+# aprašomoji statistika PRIEŠ/PO
+
+tbl_po_pasalinimo <- make_stats_table(as.data.frame(X_no_extreme), colnames(X_no_extreme))
+
+tbl_po_pasalinimo %>%
+  kable(digits=3, caption="Aprašomoji statistika (Po extreme outlier'ių pašalinimo)") %>%
+  kable_styling(full_width=FALSE)
