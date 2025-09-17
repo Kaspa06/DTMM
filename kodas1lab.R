@@ -135,17 +135,15 @@ out_tbl <- do.call(rbind, lapply(names(outlier_summary), function(v){
 }))
 out_tbl
 
-# kable(out_tbl, digits=1, caption="IQR outlier'iai: normal / mild / extreme") %>% kable_styling(full_width=FALSE)
-# write.csv(out_tbl, "outliers_summary.csv", row.names=FALSE)
-
-# eilutės su bent vienu EXTREME; pašalinam tik jas
+# eilutės su bent vienu EXTREME, pašalinam tik jas
 extreme_flags <- apply(sapply(X, function(col) classify_iqr(col)=="extreme"), 1, any)
 X_no_extreme <- X[!extreme_flags, , drop=FALSE]
 
-# aprašomoji statistika PRIEŠ/PO
+# aprašomoji statistika po outlier'iu pasalinimo
 
 tbl_po_pasalinimo <- make_stats_table(as.data.frame(X_no_extreme), colnames(X_no_extreme))
 
 tbl_po_pasalinimo %>%
   kable(digits=3, caption="Aprašomoji statistika (Po extreme outlier'ių pašalinimo)") %>%
   kable_styling(full_width=FALSE)
+
