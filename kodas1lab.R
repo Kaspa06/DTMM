@@ -192,7 +192,7 @@ p_z <- ggplot(df_means_z, aes(x = feature, y = mean)) +
   geom_col(fill = "steelblue") +
   geom_hline(yintercept = 0, linewidth = 0.6) +
   coord_flip() +
-  labs(title = "Z-score normalizacija: požymių vidurkiai",
+  labs(title = "normalizacija pagal vidurkį ir dispersiją: požymių vidurkiai",
        x = NULL, y = "Vidurkis (SD vienetais)") +
   theme_minimal(base_size = 12)
 
@@ -207,3 +207,4 @@ p_mm <- ggplot(df_means_mm, aes(x = feature, y = mean)) +
 # chartai
 p_z
 p_mm                              
+
