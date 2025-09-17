@@ -95,3 +95,11 @@ tbl_bendra <- make_stats_table(df, feats)
 tbl_bendra %>%
   kable(digits=3, caption="Aprašomoji statistika (bendra)") %>%
   kable_styling(full_width=FALSE)
+
+# 4 užduotis, praleistų reikšmių pildymas
+colSums(is.na(df))
+
+# Užpildome trūkstamas reikšmes
+df[ ] <- df %>%
+  mutate(across(where(is.numeric),
+                ~ ifelse(is.na(.), median(., na.rm=TRUE), .)))
