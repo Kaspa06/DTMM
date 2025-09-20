@@ -107,103 +107,115 @@ df[ ] <- df %>%
 
 
 
-# 5 Nustatyti taškus atsiskyrėlius, pašalinti juos iš duomenų aibės.
-# pasirenkam kintamuosius
-X <- df[, feats]
+
+
+# 5. Nustatyti taškus atsiskyrėlius, pašalinti juos iš duomenų aibės, palyginti, kaip pasikeitė imties statistiniai duomenys.
 
 # IQR klasifikatorius
 classify_iqr <- function(x){
-  Q1 <- quantile(x,.25,na.rm=TRUE); Q3 <- quantile(x,.75,na.rm=TRUE); I <- Q3-Q1
-  il <- Q1-1.5*I; ih <- Q3+1.5*I; ol <- Q1-3*I; oh <- Q3+3*I
+  Q1 <- quantile(x,.25,na.rm=TRUE); Q3 <- quantile(x,.75,na.rm=TRUE); H <- Q3-Q1
+  il <- Q1-1.5*H; ih <- Q3+1.5*H; ol <- Q1-3*H; oh <- Q3+3*H
   ifelse(x<ol | x>oh, "extreme", ifelse(x<il | x>ih, "mild", "normal"))
 }
 
-# suvestinė per požymius (normal/mild/extreme)
-outlier_summary <- sapply(X, function(col) table(classify_iqr(col)))
-n <- nrow(X)
-out_tbl <- do.call(rbind, lapply(names(outlier_summary), function(v){
-  tab <- outlier_summary[[v]]
-  normal  <- as.integer(tab["normal"]); mild <- as.integer(tab["mild"]); extreme <- as.integer(tab["extreme"])
+# Suvestinė per požymius
+out_tbl <- lapply(feats, function(f){
+  s <- classify_iqr(df[[f]])
+  tab <- table(s)
   data.frame(
-    variable     = v,
-    normal       = ifelse(is.na(normal),  0, normal),
-    mild         = ifelse(is.na(mild),    0, mild),
-    extreme      = ifelse(is.na(extreme), 0, extreme),
-    mild_proc     = round(100*ifelse(is.na(mild),0,mild)/n, 1),
-    extreme_proc  = round(100*ifelse(is.na(extreme),0,extreme)/n, 1)
+    variable=f,
+    normal=tab["normal"], mild=tab["mild"], extreme=tab["extreme"],
+    normal_pct=round(100*tab["normal"]/length(s),1),
+    mild_pct  =round(100*tab["mild"]/length(s),1),
+    extreme_pct=round(100*tab["extreme"]/length(s),1)
   )
-}))
+})
+out_tbl <- do.call(rbind, out_tbl)
 out_tbl
 
-# eilutės su bent vienu EXTREME, pašalinam tik jas
-extreme_flags <- apply(sapply(X, function(col) classify_iqr(col)=="extreme"), 1, any)
-X_no_extreme <- X[!extreme_flags, , drop=FALSE]
+# Extreme pasiskirstymas tarp klasių
+extreme_dist <- df %>%
+  select(label, all_of(feats)) %>%
+  pivot_longer(cols=all_of(feats), names_to="variable", values_to="value") %>%
+  group_by(variable) %>%
+  mutate(status=classify_iqr(value)) %>%
+  filter(status=="extreme") %>%
+  count(variable,label,name="extreme_n") %>%
+  group_by(variable) %>%
+  mutate(share_pct=round(100*extreme_n/sum(extreme_n),1))
+extreme_dist
 
-# aprašomoji statistika po outlier'iu pasalinimo
+# Pašalinam extreme iš kitų požymių, bet ne iš rr_l_0_rr_l_1 nes čia net 23 proc išskirčių
+extreme_rows <- df %>%
+  mutate(row_id=row_number()) %>%
+  select(row_id, all_of(feats)) %>%
+  pivot_longer(cols=-row_id, names_to="variable", values_to="value") %>%
+  mutate(status=classify_iqr(value)) %>%
+  filter(variable!="rr_l_0_rr_l_1", status=="extreme") %>%
+  pull(row_id)
 
-tbl_po_pasalinimo <- make_stats_table(as.data.frame(X_no_extreme), colnames(X_no_extreme))
+df_no_extreme <- df[-extreme_rows, ]
 
-tbl_po_pasalinimo %>%
-  kable(digits=3, caption="Aprašomoji statistika (Po extreme outlier'ių pašalinimo)") %>%
-  kable_styling(full_width=FALSE)
+tbl_po <- make_stats_table(df_no_extreme, feats)
 
-
-
-
+tbl_po %>%
+  kable(digits = 3, caption = "Aprašomoji statistika (po outlierių šalinimo)") %>%
+  kable_styling(full_width = FALSE)
 
 
-# 6 Sunormuoti duomenų aibę naudojant du normavimo metodus: pagal vidurkį ir dispersiją, min - max.
 
-# Z-score normavimas: vidurkis ir dispersija
-X_z <- as.data.frame(scale(X_no_extreme, center = TRUE, scale = TRUE))
 
-# Min–Max normavimas: (x - min) / (max - min)
+
+# 6. Normavimas (Vidurkis ir dispersija, ir Min–Max) ir rezultatų pateikimas
+
+# Pasiimame tik požymius po outlierių šalinimo
+X_no_extreme <- df_no_extreme[, feats, drop = FALSE]
+
+# Normalizuojame tik skaitinius stulpelius
+num_cols <- sapply(X_no_extreme, is.numeric)
+Xn <- X_no_extreme[, num_cols, drop = FALSE]
+
+# Pagal vidurkį ir dispersiją. Skaičiuojama pagal z-score, kur naudojamas standartinis nuokrypis, bet jis yra šaknis iš dispersijos
+X_z  <- as.data.frame(scale(Xn, center = TRUE, scale = TRUE))
+
+# Min–Max
 range01 <- function(x){
   r <- range(x, na.rm = TRUE)
   if (r[1] == r[2]) rep(0.5, length(x)) else (x - r[1])/(r[2] - r[1])
 }
-X_mm <- as.data.frame(lapply(X_no_extreme, range01))
+X_mm <- as.data.frame(lapply(Xn, range01))
 
 # Aprašomosios statistikos lentelės
-tbl_z  <- make_stats_table(X_z,  colnames(X_z)) %>%
-  mutate(across(where(is.numeric), ~ round(., 3)))
-tbl_mm <- make_stats_table(X_mm, colnames(X_mm)) %>%
-  mutate(across(where(is.numeric), ~ round(., 3)))
-
+tbl_z  <- make_stats_table(X_z,  names(Xn)) %>% mutate(across(where(is.numeric), ~ round(., 3)))
+tbl_mm <- make_stats_table(X_mm, names(Xn)) %>% mutate(across(where(is.numeric), ~ round(., 3)))
 
 tbl_z %>%
-  kable(digits = 3, caption = "Aprašomoji statistika (pagal vidurkį ir dispersija po normavimo)") %>%
-  kable_styling(full_width = FALSE) %>%
-  print()
+  kable(digits = 3, caption = "Aprašomoji statistika (po normavimo pagal vidurkį ir dispersiją)") %>%
+  kable_styling(full_width = FALSE) %>% print()
 
 tbl_mm %>%
-  kable(digits = 3, caption = "Aprašomoji statistika (Min–Max po normavimo)") %>%
-  kable_styling(full_width = FALSE) %>%
-  print()
+  kable(digits = 3, caption = "Aprašomoji statistika (po normavimo Min–Max)") %>%
+  kable_styling(full_width = FALSE) %>% print()
 
 # Bar chart’ai: požymių vidurkiai po normavimo
-df_means_z  <- tibble(feature = colnames(X_z),
-                      mean    = colMeans(X_z,  na.rm = TRUE))
-df_means_mm <- tibble(feature = colnames(X_mm),
-                      mean    = colMeans(X_mm, na.rm = TRUE))
+df_means_z  <- tibble(feature = names(Xn), mean = colMeans(X_z[, names(Xn)],  na.rm = TRUE))
+df_means_mm <- tibble(feature = names(Xn), mean = colMeans(X_mm[, names(Xn)], na.rm = TRUE))
 
-# Vidurkio ir dispersijos bar chart'as
 p_z <- ggplot(df_means_z, aes(x = feature, y = mean)) +
-  geom_col(fill = "steelblue") +
-  geom_hline(yintercept = 0, linewidth = 0.6) +
+  geom_col() +
+  geom_hline(yintercept = 0) +
   coord_flip() +
+  scale_y_continuous(limits = c(min(df_means_z$mean)*1.1, max(df_means_z$mean)*1.1)) +
   labs(title = "Normavimas pagal vidurkį ir dispersiją: požymių vidurkiai",
-       x = NULL, y = "Vidurkis (SD vienetais)") +
+       x = "Požymiai", y = "Vidurkis") +
   theme_minimal(base_size = 12)
 
-# Min–Max bar chart'as
 p_mm <- ggplot(df_means_mm, aes(x = feature, y = mean)) +
-  geom_col(fill = "darkorange") +
-  coord_flip(ylim = c(0,1)) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous(limits = c(0,1)) +
   labs(title = "Min–Max normavimas: požymių vidurkiai",
-       x = NULL, y = "Vidurkis (0–1)") +
+      x = "Požymiai", y = "Vidurkis") +
   theme_minimal(base_size = 12)
 
-# chartai
-p_z
-p_mm
+p_z; p_mm
