@@ -99,15 +99,8 @@ tbl_bendra %>%
 # 4 užduotis, praleistų reikšmių pildymas
 colSums(is.na(df))
 
-# Užpildome trūkstamas reikšmes
-df[ ] <- df %>%
-  mutate(across(where(is.numeric),
-                ~ ifelse(is.na(.), median(., na.rm=TRUE), .)))
-
-
-
-
-
+# Šaliname trūkstamas reikšmes
+df <- df[complete.cases(df), ]
 
 # 5. Nustatyti taškus atsiskyrėlius, pašalinti juos iš duomenų aibės, palyginti, kaip pasikeitė imties statistiniai duomenys.
 
@@ -219,3 +212,4 @@ p_mm <- ggplot(df_means_mm, aes(x = feature, y = mean)) +
   theme_minimal(base_size = 12)
 
 p_z; p_mm
+
