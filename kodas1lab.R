@@ -213,3 +213,25 @@ p_mm <- ggplot(df_means_mm, aes(x = feature, y = mean)) +
 
 p_z; p_mm
 
+# 7. vizualizavimas
+
+ggplot(df, aes(x = rr_l_0, y = rr_r_0, color = label)) +
+  geom_point(alpha = 0.6) +
+  labs( 
+    title = "Scatter plot: RR_l_0 vs RR_r_0",
+    x = "RR_l_0 (interval to the left of R)",
+    y = "RR_r_0 (interval to the right of R)"
+  ) + theme_minimal() + theme(legend.position = "top")
+
+# 8. pozymiu tarpusavio priklausomybes tyrimas
+
+cor_matrix <- cor(df[, feats], use = "complete.obs")
+
+cor_matrix %>%
+  round(3) %>%  # round to 3 decimals
+  kable(caption = "Correlation Matrix of Selected Features") %>%
+  kable_styling(full_width = FALSE)
+
+library(corrplot)
+cor_matrix <- cor(df[, feats], use="complete.obs")
+corrplot(cor_matrix, method = "circle", type = "lower", addCoef.col = "black")
