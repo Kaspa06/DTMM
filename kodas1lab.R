@@ -91,10 +91,52 @@ make_stats_table <- function(data, columns){
 # Sugeneruojame bendrą aprašomosios statistikos lentelę
 tbl_bendra <- make_stats_table(df, feats)
 
-# Gražiai atvaizduojame lentelę kaip pavyzdyje
+# atvaizduojame lentelę kaip pavyzdyje
 tbl_bendra %>%
   kable(digits=3, caption="Aprašomoji statistika (bendra)") %>%
   kable_styling(full_width=FALSE)
+
+# Aprasmoji statistika kiekvienai klasei N S V
+
+stat_funs <- list(
+  Min        = ~min(., na.rm=TRUE),
+  Q1         = ~quantile(., 0.25, na.rm=TRUE),
+  Mediana    = ~median(., na.rm=TRUE),
+  Vidurkis   = ~mean(., na.rm=TRUE),
+  Q3         = ~quantile(., 0.75, na.rm=TRUE),
+  Max        = ~max(., na.rm=TRUE),
+  Dispersija = ~var(., na.rm=TRUE)
+)
+
+make_table_for_class <- function(data, class_label, columns){
+  data %>%
+    filter(label == class_label) %>%
+    summarise(across(all_of(columns), stat_funs, .names="{.col}__{.fn}")) %>%
+    pivot_longer(everything(),
+                 names_to=c("Požymis","Statistika"),
+                 names_sep="__") %>%
+    pivot_wider(names_from=Požymis, values_from=value) %>%
+    mutate(Statistika = factor(Statistika,
+                               levels=c("Min","Q1","Mediana","Vidurkis",
+                                        "Q3","Max","Dispersija"))) %>%
+    arrange(Statistika)
+}
+
+tbl_N <- make_table_for_class(df, "N", feats)
+tbl_S <- make_table_for_class(df, "S", feats)
+tbl_V <- make_table_for_class(df, "V", feats)
+
+tbl_N %>%
+  kable(digits=3, caption="Aprašomoji statistika – klasė N") %>%
+  kable_styling(full_width = FALSE)
+
+tbl_S %>%
+  kable(digits=3, caption="Aprašomoji statistika – klasė S") %>%
+  kable_styling(full_width = FALSE)
+
+tbl_V %>%
+  kable(digits=3, caption="Aprašomoji statistika – klasė V") %>%
+  kable_styling(full_width = FALSE)
 
 # 4 užduotis, praleistų reikšmių pildymas
 colSums(is.na(df))
@@ -307,4 +349,5 @@ ggplot(df_no_extreme, aes(x = rr_l_0, y = signal_mean, color = label)) +
   ) +
   theme_minimal(base_size = 13) +
   theme(legend.position = "none")
+
 
