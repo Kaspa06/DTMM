@@ -264,7 +264,7 @@ ggplot(df, aes(x = label, y = rr_l_0_rr_l_1, fill = label)) +
 cor_matrix <- cor(df[, feats], use = "complete.obs")
 
 cor_matrix %>%
-  round(3) %>%  # round to 3 decimals
+  round(3) %>%  
   kable(caption = "Pasirinktų požymių koreliacijos matrica") %>%
   kable_styling(full_width = FALSE)
 
@@ -307,3 +307,4 @@ ggplot(df_no_extreme, aes(x = rr_l_0, y = signal_mean, color = label)) +
   ) +
   theme_minimal(base_size = 13) +
   theme(legend.position = "none")
+
