@@ -215,7 +215,8 @@ p_z; p_mm
 
 # 7. vizualizavimas
 
-ggplot(df, aes(x = rr_l_0, y = rr_r_0, color = label)) +
+#rr_l_0 ir rr_r_0 taskine diagrama pagal klases
+ggplot(df_no_extreme, aes(x = rr_l_0, y = rr_r_0, color = label)) +
   geom_point(alpha = 0.6) +
   labs( 
     title = "Scatter plot: RR_l_0 vs RR_r_0",
@@ -223,7 +224,42 @@ ggplot(df, aes(x = rr_l_0, y = rr_r_0, color = label)) +
     y = "RR_r_0 (interval to the right of R)"
   ) + theme_minimal() + theme(legend.position = "top")
 
+# Kad kurti plot density diagramas kiekvienam pozymiui viename, pridedame bibliotekas
+library(ggplot2)
+library(tidyr)
+
+# Pasirenkame požymius vizualizacijai
+feats_to_plot <- c("rr_l_0", "rr_l_0_rr_l_1", "rr_r_0", "seq_size", "signal_mean", "signal_std")
+
+# Paverčiame duomenis į "long" formatą, kad butu galima pavaizduoti viename grafike visas
+df_long <- df_no_extreme %>%
+  select(all_of(feats_to_plot), label) %>%
+  pivot_longer(cols = all_of(feats_to_plot), names_to = "feature", values_to = "value")
+
+# Plot density diagramos kiekvienam pozymiui
+ggplot(df_long, aes(x = value, color = label, fill = label)) +
+  geom_density(alpha = 0.3) +
+  facet_wrap(~feature, scales = "free") +
+  labs(title = "Pasirinktų požymių pasiskirstymas pagal klasę (Density Plot)",
+       x = "Reikšmė",
+       y = "Tankis") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+#rr_l_0/rr_l_1 boxplot pagal klases
+ggplot(df, aes(x = label, y = rr_l_0_rr_l_1, fill = label)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 4, alpha = 0.6) +
+  geom_jitter(width = 0.15, alpha = 0.3, size = 0.7) +
+  labs(
+    title = "Boxplot: RR_l_0/RR_l_1 pagal klases",
+    x = "Klasė",
+    y = "RR_l_0/RR_l_1"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+
 # 8. pozymiu tarpusavio priklausomybes tyrimas
+# koreliaciju matrica, diagrama
 
 cor_matrix <- cor(df[, feats], use = "complete.obs")
 
@@ -233,5 +269,41 @@ cor_matrix %>%
   kable_styling(full_width = FALSE)
 
 library(corrplot)
-cor_matrix <- cor(df[, feats], use="complete.obs")
+cor_matrix <- cor(df_no_extreme[, feats], use="complete.obs")
 corrplot(cor_matrix, method = "circle", type = "lower", addCoef.col = "black")
+
+# rr_r_0 ir seq_size pavaizdavimas
+ggplot(df_no_extreme, aes(x = rr_r_0, y = seq_size, color = label)) +
+  geom_point(alpha = 0.6, size = 1.5) +
+  facet_wrap(~label, scales = "free") +
+  labs(
+    title = "Scatter plot: RR_r_0 ir seq_size pagal klases",
+    x = "RR_r_0 (intervalas į dešinę nuo R)",
+    y = "seq_size (iškirpto segmento dydis)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+
+# rr_l_0 ir signal_std pavaizdavimas
+ggplot(df_no_extreme, aes(x = rr_l_0, y = signal_std, color = label)) +
+  geom_point(alpha = 0.6, size = 1.5) +
+  facet_wrap(~label, scales = "free") +
+  labs(
+    title = "Scatter plot: RR_l_0 ir signal_std pagal klases",
+    x = "RR_r_0 (intervalas į dešinę nuo R)",
+    y = "seq_size (iškirpto segmento dydis)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+
+# rr_;_0 ir signal_mean pavaizdavimas
+ggplot(df_no_extreme, aes(x = rr_l_0, y = signal_mean, color = label)) +
+  geom_point(alpha = 0.6, size = 1.5) +
+  facet_wrap(~label, scales = "free") +
+  labs(
+    title = "Scatter plot: RR_l_0 ir signal_mean pagal klases",
+    x = "RR_r_0 (intervalas į dešinę nuo R)",
+    y = "seq_size (iškirpto segmento dydis)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
