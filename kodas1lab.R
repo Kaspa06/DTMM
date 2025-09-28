@@ -213,18 +213,18 @@ p_mm <- ggplot(df_means_mm, aes(x = feature, y = mean)) +
 
 p_z; p_mm
 
-# 7. vizualizavimas
+# 7. Vizualizavimas
 
-#rr_l_0 ir rr_r_0 taskine diagrama pagal klases
+# rr_l_0 ir rr_r_0 taškinė diagrama pagal klases
 ggplot(df_no_extreme, aes(x = rr_l_0, y = rr_r_0, color = label)) +
   geom_point(alpha = 0.6) +
   labs( 
     title = "Scatter plot: RR_l_0 vs RR_r_0",
-    x = "RR_l_0 (interval to the left of R)",
-    y = "RR_r_0 (interval to the right of R)"
+    x = "RR_l_0 (intervalas į dešinę nuo R)",
+    y = "RR_r_0 (intervalas į kairę nuo R)"
   ) + theme_minimal() + theme(legend.position = "top")
 
-# Kad kurti plot density diagramas kiekvienam pozymiui viename, pridedame bibliotekas
+# Kad kurti plot density diagramas kiekvienam požymiui viename, pridedame bibliotekas
 library(ggplot2)
 library(tidyr)
 
@@ -236,7 +236,7 @@ df_long <- df_no_extreme %>%
   select(all_of(feats_to_plot), label) %>%
   pivot_longer(cols = all_of(feats_to_plot), names_to = "feature", values_to = "value")
 
-# Plot density diagramos kiekvienam pozymiui
+# Plot density diagramos kiekvienam požymiui
 ggplot(df_long, aes(x = value, color = label, fill = label)) +
   geom_density(alpha = 0.3) +
   facet_wrap(~feature, scales = "free") +
@@ -246,7 +246,7 @@ ggplot(df_long, aes(x = value, color = label, fill = label)) +
   theme_minimal() +
   theme(legend.position = "top")
 
-#rr_l_0/rr_l_1 boxplot pagal klases
+# rr_l_0/rr_l_1 boxplot pagal klases
 ggplot(df, aes(x = label, y = rr_l_0_rr_l_1, fill = label)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 4, alpha = 0.6) +
   geom_jitter(width = 0.15, alpha = 0.3, size = 0.7) +
@@ -258,21 +258,21 @@ ggplot(df, aes(x = label, y = rr_l_0_rr_l_1, fill = label)) +
   theme_minimal(base_size = 13) +
   theme(legend.position = "none")
 
-# 8. pozymiu tarpusavio priklausomybes tyrimas
-# koreliaciju matrica, diagrama
+# 8. Pozymiu tarpusavio priklausomybes tyrimas
+# Koreliaciju matrica, diagrama
 
 cor_matrix <- cor(df[, feats], use = "complete.obs")
 
 cor_matrix %>%
   round(3) %>%  # round to 3 decimals
-  kable(caption = "Correlation Matrix of Selected Features") %>%
+  kable(caption = "Pasirinktų požymių koreliacijos matrica") %>%
   kable_styling(full_width = FALSE)
 
 library(corrplot)
 cor_matrix <- cor(df_no_extreme[, feats], use="complete.obs")
 corrplot(cor_matrix, method = "circle", type = "lower", addCoef.col = "black")
 
-# rr_r_0 ir seq_size pavaizdavimas
+# rr_r_0 ir seq_size pavaizdavimas (teigiama koreliacija)
 ggplot(df_no_extreme, aes(x = rr_r_0, y = seq_size, color = label)) +
   geom_point(alpha = 0.6, size = 1.5) +
   facet_wrap(~label, scales = "free") +
@@ -284,26 +284,26 @@ ggplot(df_no_extreme, aes(x = rr_r_0, y = seq_size, color = label)) +
   theme_minimal(base_size = 13) +
   theme(legend.position = "none")
 
-# rr_l_0 ir signal_std pavaizdavimas
+# rr_l_0 ir signal_std pavaizdavimas (neigiama koreliacija)
 ggplot(df_no_extreme, aes(x = rr_l_0, y = signal_std, color = label)) +
   geom_point(alpha = 0.6, size = 1.5) +
   facet_wrap(~label, scales = "free") +
   labs(
     title = "Scatter plot: RR_l_0 ir signal_std pagal klases",
-    x = "RR_r_0 (intervalas į dešinę nuo R)",
-    y = "seq_size (iškirpto segmento dydis)"
+    x = "RR_l_0 (intervalas į kairę nuo R)",
+    y = "signal_std (signalo reikšmių dispersija)"
   ) +
   theme_minimal(base_size = 13) +
   theme(legend.position = "none")
 
-# rr_;_0 ir signal_mean pavaizdavimas
+# rr_l_0 ir signal_mean pavaizdavimas (neutrali "0" koreliacija)
 ggplot(df_no_extreme, aes(x = rr_l_0, y = signal_mean, color = label)) +
   geom_point(alpha = 0.6, size = 1.5) +
   facet_wrap(~label, scales = "free") +
   labs(
     title = "Scatter plot: RR_l_0 ir signal_mean pagal klases",
-    x = "RR_r_0 (intervalas į dešinę nuo R)",
-    y = "seq_size (iškirpto segmento dydis)"
+    x = "RR_l_0 (intervalas į kairę nuo R)",
+    y = "signal_mean (signalo reikšmių vidurkis)"
   ) +
   theme_minimal(base_size = 13) +
   theme(legend.position = "none")
