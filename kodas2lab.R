@@ -224,3 +224,134 @@ ggplot(df_means_mm, aes(x = reorder(Požymis, Vidurkis), y = Vidurkis)) +
     y = "Vidurkis"
   ) +
   theme_minimal(base_size = 12)
+
+
+
+
+
+
+
+                            
+# t-SNE
+install.packages("Rtsne")
+install.packages("colorspace")
+
+library(Rtsne);
+library(colorspace)
+
+
+if (!exists("iqr_labels")) {
+    iqr_labels <- function(x){
+        Q1 <- quantile(x, 0.25, na.rm = TRUE); Q3 <- quantile(x, 0.75, na.rm = TRUE)
+        I  <- Q3 - Q1
+        inner_lo <- Q1 - 1.5*I; inner_hi <- Q3 + 1.5*I
+        outer_lo <- Q1 - 3*I;   outer_hi <- Q3 + 3*I
+        out <- ifelse(x < outer_lo | x > outer_hi, "Išorinė",
+                      ifelse(x < inner_lo | x > inner_hi, "Vidinė", "Nėra"))
+        factor(out, levels = c("Nėra","Vidinė","Išorinė"))
+    }
+}
+rr_outlier_vec <- iqr_labels(df$rr_l_0_rr_l_1)
+
+if (!exists("run_tsne")) {
+    run_tsne <- function(X, labels, perplexity, learning_rate, max_iter = 1000, seed = 1111111){
+        set.seed(seed)
+        fit <- Rtsne(as.matrix(X), dims = 2, perplexity = perplexity, eta = learning_rate,
+                     max_iter = max_iter, check_duplicates = FALSE, verbose = FALSE)
+        tibble(tSNE1 = fit$Y[,1], tSNE2 = fit$Y[,2], label = labels)
+    }
+}
+
+if (!exists("apply_color_map")) {
+    base_colors <- c(N = "#D62728", S = "#2CA02C", V = "#1F77B4")
+    lighten_color <- function(hex_color, factor = 0.0) {
+        col_obj <- colorspace::hex2RGB(hex_color)
+        lighter <- colorspace::mixcolor(factor, col_obj, colorspace::RGB(1,1,1))
+        colorspace::hex(lighter)
+    }
+    apply_color_map <- function(df) {
+        df %>%
+            mutate(
+                color = dplyr::case_when(
+                    rr_outlier == "Nėra"    ~ base_colors[label],
+                    rr_outlier == "Vidinė"  ~ lighten_color(base_colors[label], 0.35),
+                    rr_outlier == "Išorinė" ~ lighten_color(base_colors[label], 0.65)
+                )
+            )
+    }
+}
+
+# PERPLEXITY
+perp_trip <- tibble::tibble(
+    case = factor(c("5", "20", "100"), levels = c("5", "20", "100")),
+    perplexity = c(5, 20, 100),
+    learning_rate = 400
+)
+
+tsne_perp3 <- do.call(rbind, lapply(seq_len(nrow(perp_trip)), function(i){
+    p <- perp_trip$perplexity[i]; lr <- perp_trip$learning_rate[i]
+    emb <- run_tsne(X_mm, df$label, perplexity = p, learning_rate = lr, max_iter = 1000, seed = 1111111)
+    emb$rr_outlier <- rr_outlier_vec
+    emb$case <- perp_trip$case[i]
+    emb
+}))
+tsne_perp3_c <- apply_color_map(tsne_perp3)
+
+p_perp3 <- ggplot(tsne_perp3_c, aes(tSNE1, tSNE2)) +
+    geom_point(aes(color = I(color)), size = 1.7, alpha = 0.9) +
+    facet_wrap(~ case, nrow = 1) +
+    theme_minimal() +
+    labs(title = "t-SNE (Normuota): Perplexity palyginimas",
+         subtitle = "(learning_rate = 400)",
+         x = "t-SNE1", y = "t-SNE2") +
+    theme(legend.position = "none")
+print(p_perp3)
+
+# LEARNING RATE
+lr_trip <- tibble::tibble(
+    case = factor(c("5", "400", "1000"), levels = c("5", "400", "1000")),
+    learning_rate = c(5, 400, 1000),
+    perplexity = 20
+)
+
+tsne_lr3 <- do.call(rbind, lapply(seq_len(nrow(lr_trip)), function(i){
+    lr <- lr_trip$learning_rate[i]; p <- lr_trip$perplexity[i]
+    emb <- run_tsne(X_mm, df$label, perplexity = p, learning_rate = lr, max_iter = 1000, seed = 1111111)
+    emb$rr_outlier <- rr_outlier_vec
+    emb$case <- lr_trip$case[i]
+    emb
+}))
+tsne_lr3_c <- apply_color_map(tsne_lr3)
+
+p_lr3 <- ggplot(tsne_lr3_c, aes(tSNE1, tSNE2)) +
+    geom_point(aes(color = I(color)), size = 1.7, alpha = 0.9) +
+    facet_wrap(~ case, nrow = 1) +
+    theme_minimal() +
+    labs(title = "t-SNE (Normuota): Learning rate palyginimas",
+         subtitle = "(perplexity = 20)",
+         x = "t-SNE1", y = "t-SNE2") +
+    theme(legend.position = "none")
+print(p_lr3)
+
+# normuota vs nenormuota
+p_best <- 20
+lr_best <- 400
+
+emb_norm_best <- run_tsne(X_mm,   df$label, perplexity = p_best, learning_rate = lr_best, max_iter = 1500, seed = 1111111) %>%
+    mutate(rr_outlier = rr_outlier_vec, scale = "Normuota")
+
+emb_nenorm_best <- run_tsne(X_orig, df$label, perplexity = p_best, learning_rate = lr_best, max_iter = 1500, seed = 1111111) %>%
+    mutate(rr_outlier = rr_outlier_vec, scale = "Nenormuota")
+
+emb_best_both <- dplyr::bind_rows(emb_norm_best, emb_nenorm_best)
+emb_best_both_c <- apply_color_map(emb_best_both)
+
+p_best_both <- ggplot(emb_best_both_c, aes(tSNE1, tSNE2)) +
+    geom_point(aes(color = I(color)), size = 1.9, alpha = 0.9) +
+    facet_wrap(~ scale, nrow = 1) +
+    theme_minimal() +
+    labs(title = sprintf("t-SNE: optimalūs parametrai (p=%d, lr=%d)", p_best, lr_best),
+         subtitle = "Išskirtys – šviesesnės klasės spalvos",
+         x = "t-SNE1", y = "t-SNE2") +
+    theme(legend.position = "none")
+print(p_best_both)
