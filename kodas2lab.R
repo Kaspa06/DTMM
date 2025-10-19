@@ -355,3 +355,318 @@ p_best_both <- ggplot(emb_best_both_c, aes(tSNE1, tSNE2)) +
          x = "t-SNE1", y = "t-SNE2") +
     theme(legend.position = "none")
 print(p_best_both)
+
+# --- PCA IR UMAP DALIS ---
+
+library(umap)
+library(ggplot2)
+library(dplyr)
+
+# Išskirčių susižymėjimas duomenų vaizdavimui
+# Išskirčių (outlier) sužymėjimas prieš normavimą naudojant Mahalanobis
+X_orig <- df[, feats]
+center_orig <- colMeans(X_orig)
+covmat_orig <- cov(X_orig)
+md_orig <- mahalanobis(X_orig, center_orig, covmat_orig)
+
+thr_inner_orig <- qchisq(0.95, df = ncol(X_orig))
+thr_outer_orig <- qchisq(0.99, df = ncol(X_orig))
+
+df$outlier_type <- case_when(
+  md_orig > thr_outer_orig ~ "išorinė išskirtis",
+  md_orig > thr_inner_orig ~ "vidinė išskirtis",
+  TRUE ~ "normali reikšmė"
+)
+
+# Išskirčių (outlier) sužymėjimas po normavimo naudojant Mahalanobis
+X_mm <- df_mm[, feats]
+center_mm <- colMeans(X_mm)
+covmat_mm <- cov(X_mm)
+md_mm <- mahalanobis(X_mm, center_mm, covmat_mm)
+
+thr_inner_mm <- qchisq(0.95, df = ncol(X_mm))
+thr_outer_mm <- qchisq(0.99, df = ncol(X_mm))
+
+df_mm$outlier_type <- case_when(
+  md_mm > thr_outer_mm ~ "išorinė išskirtis",
+  md_mm > thr_inner_mm ~ "vidinė išskirtis",
+  TRUE ~ "normali reikšmė"
+)
+
+# --- MAZINIMAS su PCA ---
+# PCA prieš normavimą
+pca_orig <- prcomp(df[, feats], scale. = FALSE)
+pca_df_orig <- data.frame(pca_orig$x[, 1:2],
+                          klasė = df$label,
+                          išskirtis = df$outlier_type)
+
+p_pca_orig <- ggplot(pca_df_orig, aes(PC1, PC2)) +
+  geom_point(aes(color = klasė, shape = išskirtis), size = 2, alpha = 0.8) +
+  scale_shape_manual(values = c("normali reikšmė" = 16,
+                                "vidinė išskirtis" = 3,
+                                "išorinė išskirtis" = 17)) +
+  labs(
+    title = "PCA – prieš normavimą",
+    x = "Pagrindinis komponentas 1",
+    y = "Pagrindinis komponentas 2",
+    color = "Klasė",
+    shape = "Išskirčių tipas"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+# PCA po normavimo
+pca_mm <- prcomp(df_mm[, feats], scale. = TRUE)
+pca_df_mm <- data.frame(pca_mm$x[, 1:2],
+                        klasė = df_mm$label,
+                        išskirtis = df_mm$outlier_type)
+
+p_pca_mm <- ggplot(pca_df_mm, aes(PC1, PC2)) +
+  geom_point(aes(color = klasė, shape = išskirtis), size = 2, alpha = 0.8) +
+  scale_shape_manual(values = c("normali reikšmė" = 16,
+                                "vidinė išskirtis" = 3,
+                                "išorinė išskirtis" = 17)) +
+  labs(
+    title = "PCA – po normavimo",
+    x = "Pagrindinis komponentas 1",
+    y = "Pagrindinis komponentas 2",
+    color = "Klasė",
+    shape = "Išskirčių tipas"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+# Grafikų vaizdavimas
+p_pca_orig
+p_pca_mm
+
+# --- MAZINIMAS SU UMAP ---
+# UMAP prieš normavimą
+umap_orig <- umap(df[, feats])
+umap_df_orig <- data.frame(umap_orig$layout,
+                           klasė = df$label,
+                           išskirtis = df$outlier_type)
+colnames(umap_df_orig)[1:2] <- c("UMAP1", "UMAP2")
+
+p_umap_orig <- ggplot(umap_df_orig, aes(UMAP1, UMAP2)) +
+  geom_point(aes(color = klasė, shape = išskirtis), size = 1, alpha = 0.8) +
+  scale_shape_manual(values = c("normali reikšmė" = 16,
+                                "vidinė išskirtis" = 3,
+                                "išorinė išskirtis" = 17)) +
+  labs(
+    title = "UMAP – prieš normavimą",
+    x = "UMAP1",
+    y = "UMAP2",
+    color = "Klasė",
+    shape = "Išskirčių tipas"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+# UMAP po normavimo
+umap_mm <- umap(df_mm[, feats])
+umap_df_mm <- data.frame(umap_mm$layout,
+                         klasė = df_mm$label,
+                         išskirtis = df_mm$outlier_type)
+colnames(umap_df_mm)[1:2] <- c("UMAP1", "UMAP2")
+
+p_umap_mm <- ggplot(umap_df_mm, aes(UMAP1, UMAP2)) +
+  geom_point(aes(color = klasė, shape = išskirtis), size = 1, alpha = 0.8) +
+  scale_shape_manual(values = c("normali reikšmė" = 16,
+                                "vidinė išskirtis" = 3,
+                                "išorinė išskirtis" = 17)) +
+  labs(
+    title = "UMAP – po normavimo",
+    x = "UMAP1",
+    y = "UMAP2",
+    color = "Klasė",
+    shape = "Išskirčių tipas"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+# Grafikų atvaizdavimas
+p_umap_orig
+p_umap_mm
+
+
+# --- UMAP parametrų analizė ---
+# Parametrai
+neighbors_values <- c(5, 30, 100)
+min_dist_values <- c(0.01, 0.5, 0.9)
+metrics <- c("euclidean", "manhattan", "cosine")
+
+# Išskirčių žymėjimas
+shape_values <- c("normali reikšmė" = 16,
+                  "vidinė išskirtis" = 3,
+                  "išorinė išskirtis" = 17)
+
+# Kaimynų skaičius
+for (k in neighbors_values) {
+  set.seed(123) # Dar kartą pakeičiamas atsitiktinumas
+  u <- umap(df_mm[, feats], n_neighbors = k)
+  
+  df_u <- data.frame(u$layout,
+                     klasė = df_mm$label,
+                     išskirtis = df_mm$outlier_type)
+  colnames(df_u)[1:2] <- c("UMAP1", "UMAP2")
+  
+  p <- ggplot(df_u, aes(UMAP1, UMAP2, color = klasė, shape = išskirtis)) +
+    geom_point(alpha = 0.8, size = 1) +
+    scale_shape_manual(values = shape_values) +
+    labs(
+      title = paste("UMAP – kaimynų skaičius =", k),
+      x = "UMAP1",
+      y = "UMAP2",
+      color = "Klasė",
+      shape = "Išskirčių tipas"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "top")
+  
+  print(p)  # grafikai rodomi atskirai vienas po kito
+}
+
+# Taškų gretumo skaičius min_dist
+for (md in min_dist_values) {
+  set.seed(123) # Dar kartą pakeičiamas atsitiktinumas
+  u <- umap(df_mm[, feats], min_dist = md)
+  
+  df_u <- data.frame(u$layout,
+                     klasė = df_mm$label,
+                     išskirtis = df_mm$outlier_type)
+  colnames(df_u)[1:2] <- c("UMAP1", "UMAP2")
+  
+  p <- ggplot(df_u, aes(UMAP1, UMAP2, color = klasė, shape = išskirtis)) +
+    geom_point(alpha = 0.8, size = 2) +
+    scale_shape_manual(values = shape_values) +
+    labs(
+      title = paste("UMAP – min_dist =", md),
+      x = "UMAP1",
+      y = "UMAP2",
+      color = "Klasė",
+      shape = "Išskirčių tipas"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "top")
+  
+  print(p) # grafikai rodomi atskirai vienas po kito
+}
+
+# Skirtingos atstumo matavimo metrikos
+
+for (m in metrics) {
+  set.seed(123) # Dar kartą pakeičiamas atsitiktinumas
+  u <- umap(df_mm[, feats], metric = m)
+  
+  df_u <- data.frame(u$layout,
+                     klasė = df_mm$label,
+                     išskirtis = df_mm$outlier_type)
+  colnames(df_u)[1:2] <- c("UMAP1", "UMAP2")
+  
+  p <- ggplot(df_u, aes(UMAP1, UMAP2, color = klasė, shape = išskirtis)) +
+    geom_point(alpha = 0.8, size = 2) +
+    scale_shape_manual(values = shape_values) +
+    labs(
+      title = paste("UMAP – metrika:", m),
+      x = "UMAP1",
+      y = "UMAP2",
+      color = "Klasė",
+      shape = "Išskirčių tipas"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "top")
+  
+  print(p) # grafikai rodomi atskirai vienas po kito
+}
+
+# Keičiaame k reikšmes manualiai, siekiant palyginti (tikriname 5, 10, 20)
+# PCA T ir C reikšmės
+k <- 5
+
+res_PCA <- trustworthiness_continuity_corrected(df_mm, pca_df_mm, k)
+print(res_PCA)
+
+# UMAP T ir C reikšmės, kiekvienam parametrui
+# Rezultatu vaizdavimui sukuriami "placeholderiai" kuriuos veliau užpildysime reikšmėmis
+results_umap <- data.frame(
+  n_neighbors = integer(),
+  min_dist    = numeric(),
+  metric      = character(),
+  T           = numeric(),
+  C           = numeric(),
+  stringsAsFactors = FALSE
+)
+
+k_T_C <- 10  # kaimynystės skaičius
+
+# Iteruojama kiekvienam n_neighbors
+for (k in neighbors_values) {
+  set.seed(123)
+  u <- umap(df_mm[, feats], n_neighbors = k)
+  
+  df_u <- data.frame(u$layout,
+                     klasė = df_mm$label,
+                     išskirtis = df_mm$outlier_type)
+  colnames(df_u)[1:2] <- c("UMAP1", "UMAP2")
+  
+  # Apskaičiuojami C ir T
+  res <- trustworthiness_continuity_corrected(df_mm[, feats], df_u[, c("UMAP1","UMAP2")], k_T_C)
+  
+  # Išsaugome įrašą į lentelę
+  results_umap <- rbind(results_umap, data.frame(
+    n_neighbors = k,
+    min_dist = NA,
+    metric = "euclidean",
+    T = res["T"],
+    C = res["C"]
+  ))
+}
+
+# Iteracija kiekvienai min_dist reiksmei
+for (md in min_dist_values) {
+  set.seed(123)
+  u <- umap(df_mm[, feats], min_dist = md)
+  
+  df_u <- data.frame(u$layout,
+                     klasė = df_mm$label,
+                     išskirtis = df_mm$outlier_type)
+  colnames(df_u)[1:2] <- c("UMAP1", "UMAP2")
+  
+  res <- trustworthiness_continuity_corrected(df_mm[, feats], df_u[, c("UMAP1","UMAP2")], k_T_C)
+  
+  results_umap <- rbind(results_umap, data.frame(
+    n_neighbors = NA,
+    min_dist = md,
+    metric = "euclidean",
+    T = res["T"],
+    C = res["C"]
+  ))
+}
+
+# Iteracija kiekvienai atsumo metrikai
+for (m in metrics) {
+  set.seed(123)
+  u <- umap(df_mm[, feats], metric = m)
+  
+  df_u <- data.frame(u$layout,
+                     klasė = df_mm$label,
+                     išskirtis = df_mm$outlier_type)
+  colnames(df_u)[1:2] <- c("UMAP1", "UMAP2")
+  
+  res <- trustworthiness_continuity_corrected(df_mm[, feats], df_u[, c("UMAP1","UMAP2")], k_T_C)
+  
+  results_umap <- rbind(results_umap, data.frame(
+    n_neighbors = NA,
+    min_dist = NA,
+    metric = m,
+    T = res["T"],
+    C = res["C"]
+  ))
+}
+
+# Pateikiama visa lentelė
+results_umap %>%
+  arrange(n_neighbors, min_dist, metric) %>%
+  kable(digits = 3, caption = "Trustworthiness and Continuity UMAP metodui") %>%
+  kable_styling(full_width = FALSE)                       
