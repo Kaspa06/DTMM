@@ -779,4 +779,146 @@ for (m in metrics) {
 results_umap %>%
   arrange(n_neighbors, min_dist, metric) %>%
   kable(digits = 3, caption = "Trustworthiness and Continuity UMAP metodui") %>%
-  kable_styling(full_width = FALSE)                       
+  kable_styling(full_width = FALSE)  
+
+# MDS
+
+# Trustworthiness/Continuity
+trustworthiness_continuity_corrected <- function(X_high, X_low, k) {
+  n <- nrow(X_high)
+  
+  # Calculate distance matrices
+  dist_high <- as.matrix(dist(X_high))
+  dist_low <- as.matrix(dist(X_low))
+  
+  T_sum <- 0
+  C_sum <- 0
+  
+  for (i in 1:n) {
+    # Get distances for point i (excluding self)
+    dists_high_i <- dist_high[i, -i]
+    dists_low_i <- dist_low[i, -i]
+    
+    # Get ranks in each space (ranks are for the n-1 other points)
+    ranks_high <- rank(dists_high_i, ties.method = "first")
+    ranks_low <- rank(dists_low_i, ties.method = "first")
+    
+    # Get indices of k-nearest neighbors (in the original indexing)
+    indices <- (1:n)[-i]  # all other points
+    
+    neighbors_high <- indices[order(dists_high_i)[1:k]]
+    neighbors_low <- indices[order(dists_low_i)[1:k]]
+    
+    # Trustworthiness: points in low-dim neighbors but not in high-dim
+    U <- setdiff(neighbors_low, neighbors_high)
+    for (j in U) {
+      # Find the rank of j in high-dimensional space
+      rank_j_high <- ranks_high[which(indices == j)]
+      if (rank_j_high > k) {
+        T_sum <- T_sum + (rank_j_high - k)
+      }
+    }
+    
+    # Continuity: points in high-dim neighbors but not in low-dim
+    V <- setdiff(neighbors_high, neighbors_low)
+    for (j in V) {
+      rank_j_low <- ranks_low[which(indices == j)]
+      if (rank_j_low > k) {
+        C_sum <- C_sum + (rank_j_low - k)
+      }
+    }
+  }
+  
+  # Normalization constant
+  if (2*n - 3*k - 1 <= 0) return(c(T = NA, C = NA))
+  cst <- 2 / (n * k * (2*n - 3*k - 1))
+  
+  c(T = max(0, 1 - cst * T_sum), C = max(0, 1 - cst * C_sum))
+}
+
+compute_stress1 <- function(D, Y, rescale = TRUE) {
+  d  <- as.vector(if (inherits(D, "dist")) D else dist(D))
+  dy <- as.vector(dist(as.matrix(Y)))
+  if (rescale) { a <- sum(dy * d) / sum(dy^2); dy <- a * dy }
+  sqrt(sum((dy - d)^2) / sum(d^2))
+}
+
+# --- VAF per cmdscale eigreikšmes (Euclidiniams D – kanoninis, Manhattan atveju – diagnostinis)
+var_expl_cmd <- function(D, k = 2) {
+  cm  <- cmdscale(D, k = k, eig = TRUE)
+  eig <- cm$eig[cm$eig > 0]
+  if (!length(eig)) return(NA_real_)
+  sum(eig[1:k]) / sum(eig)
+}
+
+# --- Vienas paleidimas: SMACOF MDS
+run_metric_mds_TC <- function(D, X_high, title, itmax = 300, k_nn = 10,
+                              init = c("torgerson","random"), seed = NULL) {
+  init <- match.arg(init)
+  Y0 <- NULL
+  if (init == "random") {
+    if (!is.null(seed)) set.seed(seed)
+    n <- if (inherits(D,"dist")) attr(D, "Size") else nrow(D)
+    Y0 <- matrix(rnorm(n * 2), ncol = 2)
+  }
+  fit <- smacof::mds(delta = D, type = "ratio", itmax = itmax, ndim = 2,
+                     verbose = FALSE, init = if (is.null(Y0)) "torgerson" else Y0)
+  
+  Y <- as.data.frame(fit$conf); colnames(Y) <- c("Dim1","Dim2")
+  dfp <- bind_cols(Y, plot_flags)
+  
+  VAF    <- var_expl_cmd(D, k = 2)
+  Stress <- compute_stress1(D, Y)
+  TC     <- trustworthiness_continuity_corrected(as.matrix(X_high), as.matrix(Y), k = k_nn)
+  
+  sub <- paste0(
+    "VAF ≈ ", scales::percent(VAF, accuracy = 0.1),
+    " | Stress-1 ≈ ", scales::number(Stress, accuracy = 0.001),
+    " | Trust(", k_nn, ") ≈ ", scales::number(TC["T"], accuracy = 0.001),
+    " | Continuity(", k_nn, ") ≈ ", scales::number(TC["C"], accuracy = 0.001),
+    " | itmax=", itmax
+  )
+  list(df = dfp, subtitle = sub, title = title)
+}
+
+# 1) NENORMUOTA (EUCLIDEAN)
+D_euc_unn <- dist(X_unn,  method = "euclidean")
+g_UN_E <- run_metric_mds_TC(D_euc_unn, X_high = X_unn,
+                            title = "Metrinis MDS (euclidean) – NENORMUOTA",
+                            itmax = 600, k_nn = 10, init = "torgerson")
+pEU_UN <- plot_mds_df(g_UN_E$df, g_UN_E$title, g_UN_E$subtitle)
+
+# 2) NORMUOTA (Euklidinis atstumas), 3 skirtingi itmax (skirtingos pradinės būsenos, kad metrikos skirtųsi)
+D_euc_norm <- dist(X_norm, method = "euclidean")
+g_E_100 <- run_metric_mds_TC(D_euc_norm, X_high = X_norm,
+                             title = "Metrinis MDS (euclidean) – NORMUOTA",
+                             itmax = 100, k_nn = 10, init = "random", seed = 1)
+g_E_300 <- run_metric_mds_TC(D_euc_norm, X_high = X_norm,
+                             title = "Metrinis MDS (euclidean) – NORMUOTA",
+                             itmax = 300, k_nn = 10, init = "random", seed = 2)
+g_E_600 <- run_metric_mds_TC(D_euc_norm, X_high = X_norm,
+                             title = "Metrinis MDS (euclidean) – NORMUOTA",
+                             itmax = 600, k_nn = 10, init = "random", seed = 3)
+pEU_100 <- plot_mds_df(g_E_100$df, g_E_100$title, g_E_100$subtitle)
+pEU_300 <- plot_mds_df(g_E_300$df, g_E_300$title, g_E_300$subtitle)
+pEU_600 <- plot_mds_df(g_E_600$df, g_E_600$title, g_E_600$subtitle)
+
+# 3) NORMUOTA (Manhatano atstumas), 3 skirtingi itmax (irgi skirtingos pradinės būsenos)
+D_man_norm <- dist(X_norm, method = "manhattan")
+g_M_100 <- run_metric_mds_TC(D_man_norm, X_high = X_norm,
+                             title = "Metrinis MDS (manhattan) – NORMUOTA",
+                             itmax = 100, k_nn = 10, init = "random", seed = 4)
+g_M_300 <- run_metric_mds_TC(D_man_norm, X_high = X_norm,
+                             title = "Metrinis MDS (manhattan) – NORMUOTA",
+                             itmax = 300, k_nn = 10, init = "random", seed = 5)
+g_M_600 <- run_metric_mds_TC(D_man_norm, X_high = X_norm,
+                             title = "Metrinis MDS (manhattan) – NORMUOTA",
+                             itmax = 600, k_nn = 10, init = "random", seed = 6)
+pMAN_100 <- plot_mds_df(g_M_100$df, g_M_100$title, g_M_100$subtitle)
+pMAN_300 <- plot_mds_df(g_M_300$df, g_M_300$title, g_M_300$subtitle)
+pMAN_600 <- plot_mds_df(g_M_600$df, g_M_600$title, g_M_600$subtitle)
+
+print(pEU_UN)
+print(pEU_100); print(pEU_300); print(pEU_600)
+print(pMAN_100); print(pMAN_300); print(pMAN_600)
+
