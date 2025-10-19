@@ -232,65 +232,177 @@ ggplot(df_means_mm, aes(x = reorder(Požymis, Vidurkis), y = Vidurkis)) +
 
 
                             
-# t-SNE
 install.packages("Rtsne")
 install.packages("colorspace")
+install.packages("tibble")
 
-library(Rtsne);
+library(Rtsne)
 library(colorspace)
+library(tibble)
 
-
-if (!exists("iqr_labels")) {
-    iqr_labels <- function(x){
-        Q1 <- quantile(x, 0.25, na.rm = TRUE); Q3 <- quantile(x, 0.75, na.rm = TRUE)
-        I  <- Q3 - Q1
-        inner_lo <- Q1 - 1.5*I; inner_hi <- Q3 + 1.5*I
-        outer_lo <- Q1 - 3*I;   outer_hi <- Q3 + 3*I
-        out <- ifelse(x < outer_lo | x > outer_hi, "Išorinė",
-                      ifelse(x < inner_lo | x > inner_hi, "Vidinė", "Nėra"))
-        factor(out, levels = c("Nėra","Vidinė","Išorinė"))
-    }
-}
-rr_outlier_vec <- iqr_labels(df$rr_l_0_rr_l_1)
-
-if (!exists("run_tsne")) {
-    run_tsne <- function(X, labels, perplexity, learning_rate, max_iter = 1000, seed = 1111111){
-        set.seed(seed)
-        fit <- Rtsne(as.matrix(X), dims = 2, perplexity = perplexity, eta = learning_rate,
-                     max_iter = max_iter, check_duplicates = FALSE, verbose = FALSE)
-        tibble(tSNE1 = fit$Y[,1], tSNE2 = fit$Y[,2], label = labels)
-    }
+# išskirčių aptikimas
+iqr_labels <- function(x){
+    Q1 <- quantile(x, 0.25, na.rm = TRUE); Q3 <- quantile(x, 0.75, na.rm = TRUE)
+    I  <- Q3 - Q1
+    inner_lo <- Q1 - 1.5*I; inner_hi <- Q3 + 1.5*I
+    outer_lo <- Q1 - 3*I;   outer_hi <- Q3 + 3*I
+    out <- ifelse(x < outer_lo | x > outer_hi, "Išorinė",
+                  ifelse(x < inner_lo | x > inner_hi, "Vidinė", "Nėra"))
+    factor(out, levels = c("Nėra","Vidinė","Išorinė"))
 }
 
-if (!exists("apply_color_map")) {
-    base_colors <- c(N = "#D62728", S = "#2CA02C", V = "#1F77B4")
-    lighten_color <- function(hex_color, factor = 0.0) {
-        col_obj <- colorspace::hex2RGB(hex_color)
-        lighter <- colorspace::mixcolor(factor, col_obj, colorspace::RGB(1,1,1))
-        colorspace::hex(lighter)
+
+# t-SNE vaizdavimas su klaidų patikrinimu
+run_tsne_checked <- function(X, labels, perplexity, learning_rate, max_iter = 1000, seed = 1111111){
+    set.seed(seed)
+    fit <- Rtsne(as.matrix(X), dims = 2, perplexity = perplexity, eta = learning_rate,
+                 max_iter = max_iter, check_duplicates = FALSE, verbose = FALSE)
+    
+    # tikriname ar algoritmas susilygino
+    if (length(fit$itercosts) > 1) {
+        final_cost <- fit$itercosts[length(fit$itercosts)]
+        initial_cost <- fit$itercosts[1]
+        if (final_cost > initial_cost * 0.1) {
+            warning(sprintf("t-SNE greičiausiai neužbaigė darbą: perplexity=%d, lr=%d, final_cost=%.4f", 
+                            perplexity, learning_rate, final_cost))
+        }
     }
-    apply_color_map <- function(df) {
-        df %>%
-            mutate(
-                color = dplyr::case_when(
-                    rr_outlier == "Nėra"    ~ base_colors[label],
-                    rr_outlier == "Vidinė"  ~ lighten_color(base_colors[label], 0.35),
-                    rr_outlier == "Išorinė" ~ lighten_color(base_colors[label], 0.65)
-                )
+    
+    tibble::tibble(tSNE1 = fit$Y[,1], tSNE2 = fit$Y[,2], label = labels)
+}
+
+# klasių spalvos
+base_colors <- c(N = "#D62728", S = "#2CA02C", V = "#1F77B4")
+lighten_color <- function(hex_color, factor = 0.0) {
+    col_obj <- colorspace::hex2RGB(hex_color)
+    lighter <- colorspace::mixcolor(factor, col_obj, colorspace::RGB(1,1,1))
+    colorspace::hex(lighter)
+}
+
+apply_color_map <- function(df) {
+    df %>%
+        dplyr::mutate(
+            color = dplyr::case_when(
+                rr_outlier == "Nėra"    ~ base_colors[label],
+                rr_outlier == "Vidinė"  ~ lighten_color(base_colors[label], 0.35),
+                rr_outlier == "Išorinė" ~ lighten_color(base_colors[label], 0.65)
             )
+        )
+}
+
+# trustworthiness ir continuity skaičiavimas
+
+trustworthiness_continuity_corrected <- function(X_high, X_low, k) {
+    n <- nrow(X_high)
+    
+    # skaičiuojame atstumus tarp visų taškų
+    dist_high <- as.matrix(dist(X_high))
+    dist_low <- as.matrix(dist(X_low))
+    
+    T_sum <- 0
+    C_sum <- 0
+    
+    for (i in 1:n) {
+        # atstumai nuo i-ojo taško iki kitų
+        dists_high_i <- dist_high[i, -i]
+        dists_low_i <- dist_low[i, -i]
+        
+        # kaimynų eilės pagal artumą
+        ranks_high <- rank(dists_high_i, ties.method = "first")
+        ranks_low <- rank(dists_low_i, ties.method = "first")
+        
+        # visų taškų numeriai be i-ojo
+        indices <- (1:n)[-i]
+        
+        # artimiausi k taškų originalioje ir sumažintoje erdvėse
+        neighbors_high <- indices[order(dists_high_i)[1:k]] # kaimynai pradiniuose duomenyse
+        neighbors_low <- indices[order(dists_low_i)[1:k]]   # kaimynai pritaikytame metode
+        
+        # trustworthiness: klaidos žemoje erdvėje
+        U <- setdiff(neighbors_low, neighbors_high)
+        for (j in U) {
+            rank_j_high <- ranks_high[which(indices == j)]
+            if (rank_j_high > k) {
+                T_sum <- T_sum + (rank_j_high - k)
+            }
+        }
+        
+        # continuity: klaidos aukštoje erdvėje
+        V <- setdiff(neighbors_high, neighbors_low)
+        for (j in V) {
+            rank_j_low <- ranks_low[which(indices == j)]
+            if (rank_j_low > k) {
+                C_sum <- C_sum + (rank_j_low - k)
+            }
+        }
+    }
+    
+    # normuojame continuity ir trustworthiness rezultatus [0, 1]
+    if (2*n - 3*k - 1 <= 0) return(c(T = NA, C = NA))
+    cst <- 2 / (n * k * (2*n - 3*k - 1))
+    
+    c(T = max(0, 1 - cst * T_sum), C = max(0, 1 - cst * C_sum))
+}
+
+
+# parametrų pasirinkimas
+
+grid_perp <- c(5, 10, 15, 20, 30, 40, 50)
+grid_perp <- grid_perp[grid_perp <= max_reasonable_perplexity]
+
+grid_lr <- c(10, 50, 100, 200, 500, 800, 1000)
+k_vec <- c(5, 10, 20)  # kaimynų skaičiai
+
+X_hi <- as.matrix(X_mm)
+
+set.seed(1111111)
+res <- list()
+j <- 1
+
+cat("\nIeškome geriausių parametrų...\n")
+for(p in grid_perp){
+    for(lr in grid_lr){
+        cat(sprintf("Tikriname perplexity=%d, learning_rate=%d... ", p, lr))
+        
+        emb <- run_tsne_checked(X_hi, df$label, perplexity = p, learning_rate = lr, max_iter = 1000)
+        
+        # vertiname kiekvieną kaimynų skaičių
+        mets <- sapply(k_vec, function(k) {
+            trustworthiness_continuity_corrected(X_hi, as.matrix(emb[, c("tSNE1","tSNE2")]), k)
+        })
+        
+        res[[j]] <- data.frame(
+            perplexity = p, 
+            learning_rate = lr,
+            mean_T = mean(mets["T",], na.rm = TRUE),
+            mean_C = mean(mets["C",], na.rm = TRUE), 
+            mean_TC = mean((mets["T",] + mets["C",])/2, na.rm = TRUE)
+        )
+        
+        cat(sprintf("patikimumas=%.4f, tęstinumas=%.4f, vidurkis=%.4f\n", 
+                    res[[j]]$mean_T, res[[j]]$mean_C, res[[j]]$mean_TC))
+        j <- j + 1
     }
 }
 
-# PERPLEXITY
+grid_scores <- do.call(rbind, res)
+grid_scores <- grid_scores[order(-grid_scores$mean_TC), ]
+
+cat("\nGeriausi variantai:\n")
+print(head(grid_scores, 10))
+
+# grafikai
+
+# perplexity įtaka
 perp_trip <- tibble::tibble(
-    case = factor(c("5", "20", "100"), levels = c("5", "20", "100")),
-    perplexity = c(5, 20, 100),
-    learning_rate = 400
+    case = factor(c("5", "30", "50"), levels = c("5", "30", "50")),
+    perplexity = c(5, 30, 50),
+    learning_rate = 200
 )
 
 tsne_perp3 <- do.call(rbind, lapply(seq_len(nrow(perp_trip)), function(i){
     p <- perp_trip$perplexity[i]; lr <- perp_trip$learning_rate[i]
-    emb <- run_tsne(X_mm, df$label, perplexity = p, learning_rate = lr, max_iter = 1000, seed = 1111111)
+    emb <- run_tsne_checked(X_mm, df$label, perplexity = p, learning_rate = lr, max_iter = 1000)
     emb$rr_outlier <- rr_outlier_vec
     emb$case <- perp_trip$case[i]
     emb
@@ -301,22 +413,22 @@ p_perp3 <- ggplot(tsne_perp3_c, aes(tSNE1, tSNE2)) +
     geom_point(aes(color = I(color)), size = 1.7, alpha = 0.9) +
     facet_wrap(~ case, nrow = 1) +
     theme_minimal() +
-    labs(title = "t-SNE (Normuota): Perplexity palyginimas",
-         subtitle = "(learning_rate = 400)",
+    labs(title = "t-SNE: perplexity parametro įtaka",
+         subtitle = "(learning_rate = 200)",
          x = "t-SNE1", y = "t-SNE2") +
     theme(legend.position = "none")
 print(p_perp3)
 
-# LEARNING RATE
+# learning rate įtaka
 lr_trip <- tibble::tibble(
-    case = factor(c("5", "400", "1000"), levels = c("5", "400", "1000")),
-    learning_rate = c(5, 400, 1000),
-    perplexity = 20
+    case = factor(c("10", "200", "1000"), levels = c("10", "200", "1000")),
+    learning_rate = c(10, 200, 1000),
+    perplexity = 30
 )
 
 tsne_lr3 <- do.call(rbind, lapply(seq_len(nrow(lr_trip)), function(i){
     lr <- lr_trip$learning_rate[i]; p <- lr_trip$perplexity[i]
-    emb <- run_tsne(X_mm, df$label, perplexity = p, learning_rate = lr, max_iter = 1000, seed = 1111111)
+    emb <- run_tsne_checked(X_mm, df$label, perplexity = p, learning_rate = lr, max_iter = 1000)
     emb$rr_outlier <- rr_outlier_vec
     emb$case <- lr_trip$case[i]
     emb
@@ -327,21 +439,18 @@ p_lr3 <- ggplot(tsne_lr3_c, aes(tSNE1, tSNE2)) +
     geom_point(aes(color = I(color)), size = 1.7, alpha = 0.9) +
     facet_wrap(~ case, nrow = 1) +
     theme_minimal() +
-    labs(title = "t-SNE (Normuota): Learning rate palyginimas",
-         subtitle = "(perplexity = 20)",
+    labs(title = "t-SNE: learning rate parametro įtaka",
+         subtitle = "(perplexity = 30)",
          x = "t-SNE1", y = "t-SNE2") +
     theme(legend.position = "none")
 print(p_lr3)
 
-# normuota vs nenormuota
-p_best <- 20
-lr_best <- 400
+# nenormuota ir normuota aibė
+emb_norm_best <- run_tsne_checked(X_mm, df$label, perplexity = p_best, learning_rate = lr_best, max_iter = 1500) %>%
+    dplyr::mutate(rr_outlier = rr_outlier_vec, scale = "normuoti")
 
-emb_norm_best <- run_tsne(X_mm,   df$label, perplexity = p_best, learning_rate = lr_best, max_iter = 1500, seed = 1111111) %>%
-    mutate(rr_outlier = rr_outlier_vec, scale = "Normuota")
-
-emb_nenorm_best <- run_tsne(X_orig, df$label, perplexity = p_best, learning_rate = lr_best, max_iter = 1500, seed = 1111111) %>%
-    mutate(rr_outlier = rr_outlier_vec, scale = "Nenormuota")
+emb_nenorm_best <- run_tsne_checked(X_orig, df$label, perplexity = p_best, learning_rate = lr_best, max_iter = 1500) %>%
+    dplyr::mutate(rr_outlier = rr_outlier_vec, scale = "neapdoroti")
 
 emb_best_both <- dplyr::bind_rows(emb_norm_best, emb_nenorm_best)
 emb_best_both_c <- apply_color_map(emb_best_both)
@@ -350,12 +459,13 @@ p_best_both <- ggplot(emb_best_both_c, aes(tSNE1, tSNE2)) +
     geom_point(aes(color = I(color)), size = 1.9, alpha = 0.9) +
     facet_wrap(~ scale, nrow = 1) +
     theme_minimal() +
-    labs(title = sprintf("t-SNE: optimalūs parametrai (p=%d, lr=%d)", p_best, lr_best),
-         subtitle = "Išskirtys – šviesesnės klasės spalvos",
+    labs(title = sprintf("t-SNE: geriausi parametrai (p=%d, lr=%d)", p_best, lr_best),
+         subtitle = "išskirtys pažymėtos šviesesnėmis spalvomis",
          x = "t-SNE1", y = "t-SNE2") +
     theme(legend.position = "none")
 print(p_best_both)
 
+                            
 # --- PCA IR UMAP DALIS ---
 
 library(umap)
