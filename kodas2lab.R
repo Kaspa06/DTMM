@@ -888,7 +888,6 @@ g_UN_E <- run_metric_mds_TC(D_euc_unn, X_high = X_unn,
                             itmax = 600, k_nn = 10, init = "torgerson")
 pEU_UN <- plot_mds_df(g_UN_E$df, g_UN_E$title, g_UN_E$subtitle)
 
-# 2) NORMUOTA (Euklidinis atstumas), 3 skirtingi itmax (skirtingos pradinės būsenos, kad metrikos skirtųsi)
 D_euc_norm <- dist(X_norm, method = "euclidean")
 g_E_100 <- run_metric_mds_TC(D_euc_norm, X_high = X_norm,
                              title = "Metrinis MDS (euclidean) – NORMUOTA",
@@ -903,7 +902,6 @@ pEU_100 <- plot_mds_df(g_E_100$df, g_E_100$title, g_E_100$subtitle)
 pEU_300 <- plot_mds_df(g_E_300$df, g_E_300$title, g_E_300$subtitle)
 pEU_600 <- plot_mds_df(g_E_600$df, g_E_600$title, g_E_600$subtitle)
 
-# 3) NORMUOTA (Manhatano atstumas), 3 skirtingi itmax (irgi skirtingos pradinės būsenos)
 D_man_norm <- dist(X_norm, method = "manhattan")
 g_M_100 <- run_metric_mds_TC(D_man_norm, X_high = X_norm,
                              title = "Metrinis MDS (manhattan) – NORMUOTA",
